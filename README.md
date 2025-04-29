@@ -65,7 +65,6 @@ This project provides an interactive web application to explore simulated homele
 
 ## Presentation
 
-* The final presentation slides (`DataVis-2.pdf`) are included in the repository root. (Adjust this if you decide not to include it or link it elsewhere).
-
+* The final presentation slides (`DataVis-2.pdf`) are included in the repository root.
 
 
