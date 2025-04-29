@@ -1,0 +1,34 @@
+# Python Virtual Environments
+.venv/
+*.venv/
+venv/
+env/
+*/env/
+*/venv/
+backend/venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables - IMPORTANT
+.env
+backend/.env
+
+# macOS system files
+.DS_Store
+
+# Large Data Files / Generated Data
+# Exclude original large shapefiles and tract files used only for simulation script
+data/Atlanta_Boundary.*
+data/atl_tracts.geojson
+
+# Exclude the large generated individual points CSV
+data/pit_counts_individuals.csv
+data/pit_counts_individuals_large.csv
+
+# IDE/Editor specific files (optional)
+.idea/
+.vscode/

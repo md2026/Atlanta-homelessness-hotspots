@@ -1,0 +1,715 @@
+!DOCTYPE html>
+<html>
+<head>
+    <title>Atlanta Homelessness Hotspots</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css" type="text/css">
+    <style>
+        /* --- Base Styles --- */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Prevent scrollbars on body */
+            font-family: sans-serif;
+        }
+        /* --- Map Styles --- */
+        #map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #f0f0f0; /* Background for map area */
+        }
+        /* Change cursor when hovering over selectable features */
+        #map .ol-viewport {
+             cursor: default; /* Default cursor */
+        }
+        /* --- Controls Styles --- */
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            background: rgba(255, 255, 255, 0.85);
+            padding: 8px 10px;
+            border-radius: 4px;
+            border: 1px solid #aaa;
+            z-index: 1000; /* Ensure controls are above the map */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+         #controls button {
+             padding: 5px 10px;
+             margin-left: 5px;
+             cursor: pointer;
+             border: 1px solid #ccc;
+             border-radius: 3px;
+             background-color: #f8f8f8;
+         }
+         #controls button:hover {
+             background-color: #eee;
+         }
+        /* --- Chart Container and Inner Elements Styling --- */
+        #chart-container {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 480px; /* Slightly wider */
+            max-width: 90%; /* Responsive width */
+            height: auto; /* Let content determine height */
+            max-height: calc(100vh - 80px); /* Max height relative to viewport, leaving some margin */
+            background: rgba(255, 255, 255, 0.97);
+            padding: 15px;
+            padding-bottom: 50px; /* Ensure space below last element for button */
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            z-index: 1000; /* Ensure chart is above the map */
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            overflow-y: auto; /* Add scroll if content overflows */
+            /* Use flexbox for layout */
+            display: none; /* Start hidden, use 'flex' to show */
+            flex-direction: column;
+            gap: 15px; /* Space between elements */
+        }
+         #chart-container h3#chartMainTitle { /* Style for main title */
+            margin-top: 0;
+            margin-bottom: 5px; /* Reduced space below main title */
+            font-size: 1.15em;
+            text-align: center;
+            flex-shrink: 0; /* Prevent title from shrinking */
+            color: #333;
+         }
+        .chart-wrapper { /* Wrapper for each chart + its title */
+            flex-grow: 0;
+            flex-shrink: 0;
+            position: relative;
+            height: 220px; /* Slightly reduced height */
+            width: 100%;
+            border: 1px solid #eee; /* Light border around chart area */
+            padding: 5px;
+            box-sizing: border-box; /* Include padding/border in height */
+            background-color: #fff; /* White background for chart */
+        }
+        .chart-wrapper h4 { /* Style for sub-titles */
+             text-align: center;
+             margin: 0 0 8px 0; /* Space below sub-title */
+             font-size: 0.95em;
+             font-weight: 600; /* Slightly bolder */
+             color: #444;
+        }
+        .chart-wrapper canvas { /* Canvas fills its wrapper */
+            width: 100% !important;
+            height: calc(100% - 25px) !important; /* Adjust height considering title */
+        }
+         /* Statistical Results Styling */
+         #stats-results {
+             margin-top: 10px;
+             padding: 10px;
+             border: 1px solid #ddd;
+             border-radius: 4px;
+             background-color: #f9f9f9;
+             flex-shrink: 0; /* Prevent shrinking */
+         }
+         #stats-results h4 {
+             text-align: center;
+             margin: 0 0 8px 0;
+             font-size: 1em;
+             font-weight: 600;
+             color: #333;
+         }
+         #stats-results p {
+             margin-bottom: 6px;
+             font-size: 0.85em;
+             line-height: 1.4;
+         }
+         /* Close Button Styling */
+         #closeChartBtn {
+             position: sticky;
+             bottom: 5px; /* Position relative to container padding */
+             display: block;
+             margin: 10px auto 0 auto; /* Auto margins for centering */
+             padding: 6px 15px;
+             cursor: pointer;
+             z-index: 1010;
+             background-color: #e9e9e9;
+             border: 1px solid #bbb;
+             border-radius: 3px;
+             font-size: 0.9em;
+         }
+         #closeChartBtn:hover {
+             background-color: #ddd;
+         }
+         /* Loading Indicator Style */
+         #loading-indicator {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             background-color: rgba(0, 0, 0, 0.6);
+             color: white;
+             padding: 15px 25px;
+             border-radius: 8px;
+             font-size: 1.1em;
+             display: none; /* Hidden by default */
+             z-index: 2000; /* Ensure it's above everything */
+             text-align: center;
+         }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="controls">
+        <span>Actions:</span>
+        <button id="drawBtn" title="Activate drawing tool">Draw Polygon</button>
+        <button id="deleteBtn" title="Delete selected polygon">Delete Selected</button>
+        <span id="drawStatus" style="margin-left: 10px; font-style: italic; font-size: 0.9em;">Inactive</span>
+    </div>
+
+    <div id="chart-container">
+        <h3 id="chartMainTitle">Demographics in Selected Area</h3>
+
+        <div class="chart-wrapper">
+            <h4>By Age Group</h4>
+            <canvas id="ageChart"></canvas>
+        </div>
+        <div class="chart-wrapper">
+            <h4>By Sex</h4>
+            <canvas id="sexChart"></canvas>
+        </div>
+        <div class="chart-wrapper">
+            <h4>By Ethnicity</h4>
+            <canvas id="ethnicityChart"></canvas>
+        </div>
+
+        <div id="stats-results">
+            <h4>Statistical Comparison (vs. City Average)</h4>
+            <p>Draw or select a polygon to see results.</p>
+        </div>
+
+        <button id="closeChartBtn">Close Panel</button>
+    </div>
+
+    <div id="loading-indicator">Loading Data...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script> <script>
+        // --- Configuration ---
+        const mapProjection = 'EPSG:3857'; // Web Mercator (OpenLayers default)
+        const dataProjection = 'EPSG:4326'; // WGS84 (GeoJSON standard)
+        const atlantaCenterLonLat = [-84.3880, 33.7490];
+        const backendApiUrl = 'http://localhost:5001/api/demographics'; // Ensure Flask runs on port 5001
+        const boundaryGeoJsonUrl = 'CityBoundary.geojson'; // Relative path to boundary file
+
+        // --- DOM Element References ---
+        const mapElement = document.getElementById('map');
+        const drawButton = document.getElementById('drawBtn');
+        const deleteButton = document.getElementById('deleteBtn');
+        const drawStatusElement = document.getElementById('drawStatus');
+        const chartContainer = document.getElementById('chart-container');
+        const chartMainTitle = document.getElementById('chartMainTitle');
+        const ageCanvas = document.getElementById('ageChart');
+        const sexCanvas = document.getElementById('sexChart');
+        const ethnicityCanvas = document.getElementById('ethnicityChart');
+        const statsResultsDiv = document.getElementById('stats-results');
+        const closeChartButton = document.getElementById('closeChartBtn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // --- Application State ---
+        let polygonIdCounter = 0; // Simple counter for unique feature IDs
+        const polygonDataStore = {}; // Object to store fetched data { polygonId: apiData }
+        let currentlySelectedFeatureId = null; // Keep track of the ID of the visually selected feature
+
+        // --- Map Layers ---
+        const baseLayer = new ol.layer.Tile({ source: new ol.source.OSM() });
+
+        const boundarySource = new ol.source.Vector({
+            url: boundaryGeoJsonUrl, // Load boundary from file
+            format: new ol.format.GeoJSON()
+        });
+        const boundaryLayer = new ol.layer.Vector({
+            source: boundarySource,
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({ color: 'rgba(0, 100, 255, 0.9)', width: 3 }) // Darker blue boundary
+            }),
+            opacity: 0.9,
+            zIndex: 1 // Ensure boundary is below drawn polygons
+        });
+
+        const drawSource = new ol.source.Vector(); // Source for user-drawn polygons
+        const drawLayer = new ol.layer.Vector({
+            source: drawSource,
+            style: new ol.style.Style({ // Default style for drawn polygons
+                fill: new ol.style.Fill({ color: 'rgba(255, 0, 0, 0.25)' }), // Semi-transparent red fill
+                stroke: new ol.style.Stroke({ color: 'rgba(200, 0, 0, 0.8)', width: 2 }) // Darker red border
+            }),
+            zIndex: 10 // Ensure drawn polygons are above boundary
+        });
+
+        // --- Map View ---
+        const view = new ol.View({
+            center: ol.proj.fromLonLat(atlantaCenterLonLat, mapProjection),
+            zoom: 11
+        });
+
+        // --- Map Instance ---
+        const map = new ol.Map({
+            target: mapElement,
+            layers: [baseLayer, boundaryLayer, drawLayer],
+            view: view
+        });
+
+        // --- Map Interactions ---
+        let drawInteraction = null; // Will hold the Draw interaction instance
+        // Style for visually selected polygons (used by Select interaction)
+        const selectStyle = new ol.style.Style({
+             fill: new ol.style.Fill({ color: 'rgba(0, 255, 255, 0.4)' }), // Cyan fill when selected
+             stroke: new ol.style.Stroke({ color: '#00FFFF', width: 3 }) // Bright cyan border
+        });
+        const selectInteraction = new ol.interaction.Select({
+            layers: [drawLayer], // Only select features on the draw layer
+            style: selectStyle,
+            hitTolerance: 5, // Easier selection on touch devices
+            multi: false // Ensure only one feature is visually selected at a time
+        });
+        map.addInteraction(selectInteraction); // Add select interaction permanently
+
+        // --- Chart Instances ---
+        let ageChart = null;
+        let sexChart = null;
+        let ethnicityChart = null;
+
+        // --- Helper Functions ---
+        function showLoadingIndicator(message = "Loading Data...") {
+            loadingIndicator.textContent = message;
+            loadingIndicator.style.display = 'block';
+            document.body.style.cursor = 'wait';
+        }
+
+        function hideLoadingIndicator() {
+            loadingIndicator.style.display = 'none';
+            document.body.style.cursor = 'default';
+        }
+
+        function activateDrawing() {
+             // Deactivate select interaction first to prevent conflicts
+             selectInteraction.setActive(false);
+             selectInteraction.getFeatures().clear(); // Clear any existing selection
+             hideChartPanel(); // Hide panel when starting to draw
+
+            if (!drawInteraction) { // Create if it doesn't exist
+                 drawInteraction = new ol.interaction.Draw({
+                     source: drawSource,
+                     type: 'Polygon'
+                 });
+                 map.addInteraction(drawInteraction); // Add to map
+                 drawInteraction.on('drawend', handleDrawEnd); // Attach listener only once
+            }
+            drawInteraction.setActive(true); // Activate drawing
+            drawStatusElement.textContent = 'Active - Click map to draw, double-click or click start point to finish.';
+            console.log("Draw interaction activated.");
+        }
+
+        function deactivateDrawing() {
+            if (drawInteraction) {
+                drawInteraction.setActive(false);
+            }
+            selectInteraction.setActive(true); // Reactivate select AFTER drawing is deactivated
+            drawStatusElement.textContent = 'Inactive';
+            console.log("Draw interaction deactivated.");
+        }
+
+        function destroyAllCharts() {
+            if (ageChart) { ageChart.destroy(); ageChart = null; }
+            if (sexChart) { sexChart.destroy(); sexChart = null; }
+            if (ethnicityChart) { ethnicityChart.destroy(); ethnicityChart = null; }
+            // console.log("Previous charts destroyed."); // Less verbose logging
+        }
+
+        function showChartPanel() {
+            // console.log("Showing chart container."); // Less verbose logging
+            chartContainer.style.display = 'flex'; // Use flex to show container
+        }
+
+        function hideChartPanel() {
+            // console.log("Hiding chart container."); // Less verbose logging
+            chartContainer.style.display = 'none';
+            destroyAllCharts(); // Destroy charts when hiding
+            chartMainTitle.innerText = 'Demographics in Selected Area'; // Reset title
+            statsResultsDiv.innerHTML = '<h4>Statistical Comparison (vs. City Average)</h4><p>Draw or select a polygon to see results.</p>'; // Reset stats text
+            currentlySelectedFeatureId = null; // Reset tracker when panel is hidden
+        }
+
+        // --- Chart Update Function ---
+        function updateChartsAndStats(apiData, polygonId) { // Added polygonId for context
+            destroyAllCharts();
+            console.log(`Updating charts and stats for Polygon ID: ${polygonId}`, apiData);
+
+            const totalCount = apiData.counts?.total_homeless ?? 'N/A'; // Use optional chaining
+            chartMainTitle.innerText = `Demographics (Total: ${totalCount}) - Polygon ID: ${polygonId}`; // Include ID in title
+
+            if (!apiData.counts) {
+                 console.warn(`No count data available for Polygon ID: ${polygonId}.`);
+                 hideChartPanel();
+                 return;
+            }
+
+            // --- Define Color Palettes ---
+            // Standard palettes for Age and Ethnicity
+            const agePalette = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a'];
+            const ethnicityPalette = ['#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928'];
+
+            // *** CORRECTED Color Map for Sex ***
+            const sexColorMap = {
+                'female': 'rgba(255, 99, 132, 0.7)', // Pink for Female
+                'male': 'rgba(54, 162, 235, 0.7)',   // Blue for Male
+                // Add fallbacks for other potential labels or null/undefined
+                'other': 'rgba(255, 159, 64, 0.7)',    // Orange
+                'unknown': 'rgba(255, 159, 64, 0.7)',    // Orange
+            };
+
+            // --- Helper to create chart config ---
+            // Modified to accept specific color mapping for Sex chart
+            const createChartConfig = (type, labels, data, paletteOrMap, label = 'Count', indexAxis = undefined) => {
+                let backgroundColors;
+                // Check if paletteOrMap is a map (object) or an array
+                if (typeof paletteOrMap === 'object' && !Array.isArray(paletteOrMap)) {
+                     // It's a map (for Sex chart), generate colors based on labels
+                     backgroundColors = labels.map(l => paletteOrMap[l.toLowerCase()] || paletteOrMap['unknown']); // Use lowercase label, fallback to grey
+                } else {
+                    // It's an array (palette), use it directly
+                    backgroundColors = paletteOrMap.slice(0, labels.length);
+                }
+
+                // Make border colors slightly darker/opaque version of background
+                 const borderColors = backgroundColors.map(color => {
+                     try {
+                         // Basic approach: remove alpha or set to 1
+                         if (color.startsWith('rgba')) {
+                             return color.replace(/,[^,]+?\)$/, ', 1)'); // Replace alpha with 1
+                         } else if (color.startsWith('#') && color.length === 9) {
+                              return color.substring(0, 7); // Remove alpha hex if present
+                         }
+                         return color; // Return original if no alpha found
+                     } catch (e) {
+                         return color; // Fallback to original color on error
+                     }
+                 });
+
+                return {
+                    type: type,
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: label,
+                            data: data,
+                            backgroundColor: backgroundColors,
+                            borderColor: borderColors, // Use derived border colors
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                         indexAxis: indexAxis, // 'y' for horizontal bar charts
+                         scales: type === 'bar' ? { // Only add scales for bar charts
+                             [indexAxis === 'y' ? 'x' : 'y']: { // Determine scale axis based on indexAxis
+                                 beginAtZero: true,
+                                 ticks: { precision: 0 }, // Whole numbers for counts
+                                 title: { display: false, text: 'Count' } // Hide axis title for space
+                             }
+                         } : undefined,
+                         responsive: true,
+                         maintainAspectRatio: false, // Important for fitting in wrapper
+                         plugins: {
+                             legend: {
+                                 display: type === 'pie', // Show legend only for pie charts
+                                 position: 'top',
+                             },
+                             tooltip: {
+                                 enabled: true
+                             }
+                         }
+                    }
+                };
+            };
+
+
+            // --- Create Charts ---
+            const createChartSafe = (canvas, dataKey, paletteOrMap, type, indexAxis = undefined) => {
+                 if (canvas && apiData.counts[dataKey] && Object.keys(apiData.counts[dataKey]).length > 0) {
+                     const chartData = apiData.counts[dataKey];
+                     // Sort labels for bar charts, keep original order for pie charts (usually preferred)
+                     const labels = type === 'pie' ? Object.keys(chartData) : Object.keys(chartData).sort();
+                     const counts = labels.map(label => chartData[label]);
+                     try {
+                         // Pass the appropriate palette or map
+                         return new Chart(canvas.getContext('2d'), createChartConfig(type, labels, counts, paletteOrMap, `Count by ${dataKey.split('_')[1]}`, indexAxis));
+                     } catch (e) { console.error(`Chart.js error for ${dataKey}:`, e); return null; }
+                 } else {
+                     console.warn(`No data for ${dataKey} chart.`);
+                     try { canvas.getContext('2d').fillText("No data", 10, 50); } catch(e) {} // Attempt to show message
+                     return null;
+                 }
+            };
+
+            // Create Age and Ethnicity charts using palettes (bar charts, sorted labels)
+            ageChart = createChartSafe(ageCanvas, 'by_age', agePalette, 'bar', 'y');
+            ethnicityChart = createChartSafe(ethnicityCanvas, 'by_ethnicity', ethnicityPalette, 'bar', 'y');
+            // Create Sex chart using the specific color map (pie chart, original label order)
+            sexChart = createChartSafe(sexCanvas, 'by_sex', sexColorMap, 'pie');
+
+
+            // --- Display Statistical Results ---
+            statsResultsDiv.innerHTML = '<h4>Statistical Comparison (vs. City Average)</h4>'; // Clear previous results
+            if (apiData.stats) {
+                 if (apiData.stats.message) {
+                     statsResultsDiv.innerHTML += `<p>${apiData.stats.message}</p>`;
+                 } else if (Object.keys(apiData.stats).length > 0) {
+                     for (const category in apiData.stats) {
+                         const stat = apiData.stats[category];
+                         let resultText = '';
+                         const categoryName = category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+                         if (stat.error) {
+                             resultText = `<p><strong>${categoryName}:</strong> <span style="color: orange;">${stat.error}</span></p>`;
+                         } else if (stat.p_value !== undefined && stat.p_value !== null) {
+                             const pValue = stat.p_value;
+                             const significanceThreshold = 0.05;
+                             const isSignificant = pValue < significanceThreshold;
+                             resultText = `<p><strong>${categoryName}:</strong> Chi² p = ${pValue < 0.001 ? pValue.toExponential(2) : pValue.toFixed(3)}. `; // Format p-value
+                             if (isSignificant) {
+                                 resultText += '<span style="color: red; font-weight: bold;">Significantly different</span> from city avg.';
+                             } else {
+                                 resultText += '<span style="color: green;">No significant difference</span> from city avg.';
+                             }
+                             resultText += '</p>';
+                         } else {
+                              resultText = `<p><strong>${categoryName}:</strong> <span style="color: grey;">Analysis result unavailable.</span></p>`;
+                         }
+                         statsResultsDiv.innerHTML += resultText;
+                     }
+                 } else {
+                     statsResultsDiv.innerHTML += '<p>No statistical analysis results available.</p>';
+                 }
+            } else {
+                 statsResultsDiv.innerHTML += '<p style="color: orange;">Statistical analysis results not received.</p>';
+            }
+
+            showChartPanel();
+            currentlySelectedFeatureId = polygonId; // Update tracker
+        }
+
+        // --- Event Handler for Draw End ---
+        async function handleDrawEnd(event) {
+            deactivateDrawing(); // Stop drawing mode immediately
+            const feature = event.feature;
+
+            // Assign Unique ID and Store Feature
+            polygonIdCounter++;
+            const currentPolygonId = polygonIdCounter;
+            feature.setId(currentPolygonId); // Set the ID on the OpenLayers feature object
+            console.log(`Polygon drawn with ID: ${currentPolygonId}`);
+
+            // Prepare Geometry for API
+            const geometry = feature.getGeometry();
+            const transformedGeometry = geometry.clone().transform(mapProjection, dataProjection);
+            const geoJsonFormat = new ol.format.GeoJSON();
+            const geometryForApi = geoJsonFormat.writeGeometryObject(transformedGeometry); // Get only geometry part
+
+            console.log(`Sending geometry for Polygon ID ${currentPolygonId} to backend...`);
+            showLoadingIndicator(`Fetching data for Polygon ${currentPolygonId}...`);
+
+            try {
+                // Fetch data from backend
+                const response = await fetch(backendApiUrl, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ geometry: geometryForApi })
+                 });
+
+                 // Handle HTTP errors
+                 if (!response.ok) {
+                     let errorDetails = `HTTP status ${response.status}`;
+                     let errorFromServer = null;
+                     try { errorFromServer = await response.json(); } catch (e) { /* ignore json parsing error */ }
+                     if (errorFromServer && errorFromServer.error) { errorDetails += `: ${errorFromServer.error}`; }
+                     throw new Error(errorDetails);
+                 }
+
+                const data = await response.json();
+                console.log(`Received data for Polygon ID ${currentPolygonId}:`, data);
+
+                // Store Fetched Data
+                polygonDataStore[currentPolygonId] = data;
+                console.log(`Data stored for Polygon ID: ${currentPolygonId}`);
+
+                hideLoadingIndicator(); // Hide spinner
+
+                // Select the newly drawn feature visually
+                selectInteraction.getFeatures().clear();
+                selectInteraction.getFeatures().push(feature);
+
+                // Update charts with the new data
+                updateChartsAndStats(data, currentPolygonId);
+
+            } catch (error) {
+                 // Handle fetch or processing errors
+                 console.error(`Error fetching/processing data for Polygon ID ${currentPolygonId}:`, error);
+                 hideLoadingIndicator();
+                 alert(`Failed to fetch demographic data for new polygon: ${error.message}\nCheck console/backend logs.`);
+                 hideChartPanel();
+                 // Optionally remove the drawn polygon if the fetch failed?
+                 // if (drawSource.hasFeature(feature)) {
+                 //     drawSource.removeFeature(feature);
+                 // }
+            }
+        }
+
+        // --- Click Handler for Selecting Overlapping Features ---
+        map.on('click', function(evt) {
+            // Ignore clicks if drawing is active
+            if (drawInteraction && drawInteraction.getActive()) {
+                return;
+            }
+
+            // Find all features at the clicked pixel, only from the drawLayer
+            const featuresAtPixel = map.getFeaturesAtPixel(evt.pixel, {
+                layerFilter: layer => layer === drawLayer,
+                hitTolerance: 5 // Same tolerance as select interaction
+            });
+
+            if (featuresAtPixel.length === 0) {
+                // Clicked outside any drawn polygon
+                if (selectInteraction.getFeatures().getLength() > 0) {
+                    selectInteraction.getFeatures().clear(); // Clear visual selection only if something was selected
+                    hideChartPanel(); // Hide the panel
+                    console.log("Clicked empty area, cleared selection.");
+                }
+                return;
+            }
+
+            console.log(`Found ${featuresAtPixel.length} polygon(s) at click location.`);
+
+            let nextFeatureToSelect = null;
+
+            if (featuresAtPixel.length === 1) {
+                // Only one feature, select it directly
+                nextFeatureToSelect = featuresAtPixel[0];
+                console.log(`Selecting single polygon ID: ${nextFeatureToSelect.getId()}`);
+            } else {
+                // Multiple features - implement cycling logic
+                const currentSelection = selectInteraction.getFeatures().getArray();
+                const currentlySelectedFeature = currentSelection.length > 0 ? currentSelection[0] : null;
+
+                // Find the index of the currently selected feature within the features at the pixel
+                let currentSelectedIndex = -1;
+                if (currentlySelectedFeature) {
+                    // Find based on feature ID
+                    currentSelectedIndex = featuresAtPixel.findIndex(f => f.getId() === currentlySelectedFeature.getId());
+                }
+
+                // Determine the index of the next feature to select (cycle through)
+                const nextIndex = (currentSelectedIndex + 1) % featuresAtPixel.length;
+                nextFeatureToSelect = featuresAtPixel[nextIndex];
+                console.log(`Cycling selection. Current index: ${currentSelectedIndex}, Next index: ${nextIndex}, Next polygon ID: ${nextFeatureToSelect.getId()}`);
+            }
+
+            // Visually select the next feature (or the same one if only one)
+            selectInteraction.getFeatures().clear(); // Clear previous selection first
+            selectInteraction.getFeatures().push(nextFeatureToSelect); // Add the new one
+
+            // Retrieve and display data from the store
+            const selectedPolygonId = nextFeatureToSelect.getId();
+            if (polygonDataStore[selectedPolygonId]) {
+                console.log(`Found stored data for Polygon ID: ${selectedPolygonId}`);
+                updateChartsAndStats(polygonDataStore[selectedPolygonId], selectedPolygonId);
+            } else {
+                // Data not found (should ideally not happen if fetch succeeded after drawing)
+                console.warn(`No stored data found for selected Polygon ID: ${selectedPolygonId}.`);
+                hideChartPanel();
+                alert(`Could not retrieve data for the selected polygon (ID: ${selectedPolygonId}). Data might be missing or fetch failed previously.`);
+            }
+        });
+
+
+        // --- Event Listeners for Buttons ---
+        drawButton.addEventListener('click', () => {
+             // Toggle draw mode
+             if (!drawInteraction || !drawInteraction.getActive()) {
+                 activateDrawing();
+             } else {
+                 deactivateDrawing();
+             }
+        });
+
+        deleteButton.addEventListener('click', () => {
+            const selectedFeatures = selectInteraction.getFeatures(); // Get the collection
+            if (selectedFeatures.getLength() > 0) {
+                 const featureToRemove = selectedFeatures.item(0); // Get the first (and only) selected feature
+                 const polygonIdToRemove = featureToRemove.getId();
+
+                 // Remove from map source
+                 if (drawSource.hasFeature(featureToRemove)) {
+                      drawSource.removeFeature(featureToRemove);
+                 }
+                 // Remove from selection interaction's internal collection
+                 selectedFeatures.clear();
+
+                 // Remove from data store
+                 if (polygonDataStore[polygonIdToRemove]) {
+                     delete polygonDataStore[polygonIdToRemove];
+                     console.log(`Deleted polygon and associated data for ID: ${polygonIdToRemove}`);
+                 } else {
+                      console.log(`Deleted polygon (ID: ${polygonIdToRemove}), no associated data found in store.`);
+                 }
+                 hideChartPanel(); // Hide the panel after delete
+            } else {
+                alert("Click on a drawn polygon to select it first, then click delete.");
+            }
+        });
+
+        closeChartButton.addEventListener('click', () => {
+             hideChartPanel();
+             selectInteraction.getFeatures().clear(); // Also clear visual selection when closing panel manually
+        });
+
+        // --- Initial Boundary Loading Checks & Error Handling ---
+        boundarySource.on('featuresloadend', (event) => {
+             if (boundarySource.getFeatures().length > 0) {
+                 console.log("Boundary features loaded successfully from:", boundaryGeoJsonUrl);
+                 // Optional: Zoom to boundary extent on load
+                 // map.getView().fit(boundarySource.getExtent(), { padding: [50, 50, 50, 50], duration: 500 });
+             } else {
+                 console.error("Boundary features loaded, but the source is empty. Check GeoJSON content at:", boundaryGeoJsonUrl);
+                 alert(`WARNING: City Boundary loaded but appears empty. Ensure '${boundaryGeoJsonUrl}' is valid and contains features.`);
+             }
+         });
+         boundarySource.on('featuresloaderror', (event) => {
+              console.error("Error loading boundary GeoJSON from:", boundaryGeoJsonUrl);
+              alert(`FATAL ERROR: Could not load City Boundary GeoJSON from '${boundaryGeoJsonUrl}'. Please ensure the file exists in the same directory as index.html and is valid GeoJSON.`);
+              // Disable drawing if boundary fails
+              drawButton.disabled = true;
+              drawStatusElement.textContent = 'Boundary Load Failed';
+          });
+
+         // --- Cursor Style on Hover ---
+         map.on('pointermove', function (e) {
+             if (e.dragging) return; // Ignore during drag
+             const pixel = map.getEventPixel(e.originalEvent);
+             // Check if pixel hits a feature on the drawLayer
+             const hit = map.hasFeatureAtPixel(pixel, {
+                 layerFilter: layer => layer === drawLayer,
+                 hitTolerance: 3 // Adjust tolerance as needed
+             });
+             // Change cursor style based on hit detection
+             map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+         });
+
+
+        // --- Initial Setup ---
+        console.log("Map and interactions initialized. Ready to draw or select polygons.");
+        hideLoadingIndicator(); // Ensure hidden initially
+        deactivateDrawing(); // Ensure drawing is off initially
+
+    </script>
+</body>
+</html>
