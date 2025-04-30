@@ -65,6 +65,11 @@ This project provides an interactive web application to explore simulated homele
 
 ## Presentation
 
-* The final presentation slides (`DataVis-2.pdf`) are included in the repository root.
+The presentation slides **without narration** are available as `DataVis.pptx` in this repository root for quick reference.
 
+**Important:** The required voiceover narration is included in a video version of the presentation (`DataVis.mp4`), hosted externally due to file size limitations. Please view the **narrated presentation video** using the link below:
+
+**[https://studentgsu-my.sharepoint.com/:v:/g/personal/mdawit1_student_gsu_edu/Ed73uOsLtj1LhNizBr0-cWABA2g_Iu9kgJA7IH_GKCGH4Q]**
+
+*(Note: Ensure you have the necessary permissions to view the linked video, typically via your university account.)*
 
